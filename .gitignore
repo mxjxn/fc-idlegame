@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.cpcache/
+
+# Build outputs
+public/js/
+.shadow-cljs/
+target/
+
+# Editor
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local

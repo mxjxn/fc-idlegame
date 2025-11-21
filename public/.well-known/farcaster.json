@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Farcaster Idle Game",
+  "iconUrl": "https://your-domain.com/icon.png",
+  "homeUrl": "https://your-domain.com",
+  "splashImageUrl": "https://your-domain.com/splash.png",
+  "splashBackgroundColor": "#667eea",
+  "description": "An idle clicker game built on Farcaster"
+}
