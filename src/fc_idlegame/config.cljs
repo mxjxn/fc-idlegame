@@ -9,6 +9,7 @@
   {:like-given 2         ;; Give a like to someone's cast
    :reply-given 5        ;; Reply to someone's cast
    :cast-generated 1     ;; Generate your own cast (level 5+)
+   :idle-cast 1          ;; Idle cast generated automatically
    :like-received 5      ;; Someone likes your cast
    :reply-received 3     ;; Someone replies to your cast
    :banger-achieved 100}) ;; Your cast becomes a banger
@@ -179,6 +180,9 @@
 (def npc-like-probability 0.10) ;; 10% chance per tick
 (def npc-reply-probability 0.05) ;; 5% chance per tick
 (def npc-tick-interval-ms 30000) ;; Check every 30 seconds
+
+;; Idle Cast System
+(def idle-cast-interval-ms 120000) ;; Generate idle cast every 2 minutes
 
 ;; ============================================================================
 ;; CAST LIFESPAN

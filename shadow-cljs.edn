@@ -2,7 +2,8 @@
 
  :dependencies [[reagent "1.2.0"]
                 [re-frame "1.4.3"]
-                [cljs-ajax "0.8.4"]]
+                [cljs-ajax "0.8.4"]
+                [binaryage/devtools "1.0.7"]]
 
  :dev-http {8080 "public"}
 

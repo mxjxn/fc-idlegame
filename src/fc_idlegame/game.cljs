@@ -45,9 +45,9 @@
 ;; HELPER FUNCTIONS
 ;; ============================================================================
 
-(defn uuid []
-  "Generate a simple UUID"
-  (str "cast-" (.now js/Date) "-" (rand-int 99999)))
+(defn generate-cast-id []
+  "Generate a unique cast ID"
+  (str "cast-" (.now js/Date) "-" (rand-int 1000000)))
 
 (defn now []
   "Get current timestamp"
@@ -170,7 +170,7 @@
         lifespan (config/get-cast-lifespan level false)
         expires-at (when lifespan (+ (now) lifespan))
 
-        new-cast {:id (uuid)
+        new-cast {:id (generate-cast-id)
                   :player-fid creator-fid
                   :is-npc? is-npc?
                   :text cast-text
@@ -420,7 +420,7 @@
       true (update-recharge-meters)
 
       ;; NPC tick if needed
-      should-npc-tick? (-> (npc-tick)
+      should-npc-tick? (-> npc-tick
                            (assoc-in [:game-loop :last-npc-tick] now))
 
       ;; Refresh feed
