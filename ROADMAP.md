@@ -6,69 +6,110 @@ A conversational idle game where players generate "casts" through clicking and i
 
 ---
 
-## Phase 1: MVP (CURRENT) ✅
+## Phase 1: MVP ✅ COMPLETE (v0.0.1)
 
 **Goal**: Core idle game mechanics with canned casts, local storage persistence
+
+**Status**: ✅ **COMPLETE** - Released as v0.0.1
 
 ### Features Implemented
 
 #### Game Mechanics
 - ✅ XP and leveling system
-  - XP sources: manual clicks (1 XP), idle casts (0.5 XP), likes (5 XP), bangers (100 XP)
-  - Level calculation: `level = √(XP / 100)`
+  - XP sources: manual clicks (1 XP), idle casts (1 XP), likes received (5 XP), replies received (3 XP), bangers (100 XP)
+  - Level calculation: `level = √(XP / 100)` (minimum level 1)
+  - XP progress bar with accurate reset after level up
   - Progression: 10 levels in ~1 month passive, or ~1 week with 2hrs/day active play
 - ✅ Cast generation system
-  - Click to generate casts manually
-  - Idle generation every ~4 minutes
+  - Manual cast generation with cooldown meter (configurable, default 1 minute)
+  - Idle cast generation with cooldown meter (configurable, default 2 minutes)
   - Quality tiers: Common (80%), Uncommon (15%), Rare (4%), Epic (0.9%), Legendary (0.1%)
+  - Level-based cast selection from canned library
 - ✅ Cast lifespan system
   - Levels 1-10: 1 hour lifespan
   - Levels 11-20: 6 hour lifespan
   - Levels 21-30: 24 hour lifespan
   - Bangers: Never expire
+- ✅ Recharge meter system
+  - Visual cooldown indicators (three nested rings)
+  - Separate meters for manual casts, idle casts, and replies
+  - Real-time countdown display with "ready!" state
+- ✅ NPC system
+  - NPC cast generation (scaled to player activity)
+  - NPC auto-liking (75% probability, 5x rate)
+  - NPC replies to player casts (level-based canned replies)
+  - Notification system for NPC interactions
 
 #### Content
-- ✅ 100 canned casts organized by category
-  - Philosophical (20)
-  - Crypto/Web3 (20)
-  - Humor (20)
-  - Relatable (20)
-  - Wholesome (20)
+- ✅ Expanded canned casts library (100+ casts)
+  - Level 0 casts (Common, Uncommon, Rare, Epic)
+  - Level 1-5 casts
+  - Level 6-10 casts
+  - Organized by category and rarity
+- ✅ Canned replies system
+  - Level 1-5: Basic replies
+  - Level 6-10: Supportive and encouraging replies
+  - NPC replies based on NPC level
 
 #### UI/UX
-- ✅ Player stats header (level, casts, bangers, active casts)
-- ✅ XP progress bar
-- ✅ Cast generator button with last cast preview
-- ✅ Feed showing all active casts
-- ✅ Cast cards with quality indicators, likes, and metadata
-- ✅ Statistics panel (XP, activity, quality breakdown, time)
-- ✅ Level features panel showing unlocked/locked features
+- ✅ Optimized header layout
+  - Level display and player info
+  - XP progress bar (70% width)
+  - Cooldown indicator with three rings (30% width)
+  - Stats toggle button
+- ✅ Cast feed (Timeline)
+  - Shows all active casts (player + NPC)
+  - Cast cards with quality indicators, likes, replies
+  - Author avatars and names
+  - Like button with visual feedback
+  - Reply button with threaded comments
+  - Smooth animations for new casts
+- ✅ Statistics overlay panel
+  - Comprehensive player stats (XP, level, casts, bangers, active casts)
+  - Quality breakdown
+  - Playtime tracking
+  - Accessible via stats icon button
+- ✅ Notification system
+  - Toast notifications for likes, replies, and bangers
+  - Horizontal stacking (latest 3 visible)
+  - Auto-dismiss after 5+ notifications
+- ✅ Responsive design
+  - Optimized for Farcaster miniapp breakpoint (400px)
+  - Touch-friendly buttons
+  - Adaptive layout for different screen sizes
+- ✅ Farcaster-themed UI
+  - Dark background (#000000)
+  - White text with purple accents (#8E44AD)
+  - Modern, clean design
 
 #### Data Persistence
 - ✅ LocalStorage for game state
-- ✅ Auto-save every 30 seconds
+- ✅ Auto-save on state changes
 - ✅ Firebase integration layer (stub implementation ready)
 
 #### Technical
 - ✅ ClojureScript + shadow-cljs setup
-- ✅ Reagent for UI components
+- ✅ Reagent for reactive UI components
 - ✅ Firebase and OpenAI dependencies added
-- ✅ Game configuration system
+- ✅ Game configuration system (easy recharge time configuration)
 - ✅ Modular namespace organization
+- ✅ Clean separation of concerns (game logic, views, config)
 
 ### Known Limitations (MVP)
 - All casts use canned content (no AI generation yet)
-- Feed only shows player's own casts
-- No multiplayer interactions
+- Feed shows player's own casts + NPC casts (no real multiplayer yet)
 - No sharing or SVG generation
 - No actual Firebase backend connection
 - No Farcaster SDK integration
+- NPC interactions are simulated (not real players)
 
 ---
 
-## Phase 2: Social & Multiplayer
+## Phase 2: Social & Multiplayer (NEXT)
 
-**Goal**: Anonymous feed, NPC interactions, banger system, share functionality
+**Goal**: Real multiplayer feed, Firebase backend, banger system, share functionality
+
+**Status**: 🚧 Ready to begin
 
 ### Features to Implement
 
@@ -89,11 +130,13 @@ A conversational idle game where players generate "casts" through clicking and i
 - [ ] Cast filtering and sorting
 - [ ] Pagination for large feeds
 
-#### NPC System
-- [ ] Simulated players at each level
-- [ ] Auto-liking mechanism (10% probability every 30s)
-- [ ] Canned reply generation from NPCs
-- [ ] NPC activity scales with player level
+#### NPC System (Partially Complete)
+- ✅ Simulated players at each level
+- ✅ Auto-liking mechanism (75% probability, 5x rate)
+- ✅ Canned reply generation from NPCs
+- ✅ NPC activity scales with player level
+- [ ] Real-time NPC state sync across players
+- [ ] NPC persistence in Firebase
 
 #### Banger Detection
 - [ ] Automatic promotion to banger status (10 likes, 5 from real users)
@@ -101,10 +144,12 @@ A conversational idle game where players generate "casts" through clicking and i
 - [ ] Permanent storage (no expiration)
 - [ ] Banger leaderboard
 
-#### Player Interactions
-- [ ] Like other players' casts
-- [ ] Reply with canned responses (editable before sending)
-- [ ] View cast details (likes, replies)
+#### Player Interactions (Partially Complete)
+- ✅ Like casts (with visual feedback)
+- ✅ Reply with canned responses (threaded comments)
+- ✅ View cast details (likes, replies)
+- [ ] Like other players' casts (currently only own casts)
+- [ ] Reply to other players' casts (currently only own casts)
 - [ ] Report/flag inappropriate content
 
 #### Share System
@@ -365,28 +410,55 @@ A conversational idle game where players generate "casts" through clicking and i
 
 ## Next Actions (Immediate)
 
-1. **Complete MVP testing**
-   - Test all game mechanics locally
-   - Fix any UI/UX issues
-   - Verify localStorage persistence
+### Phase 1 Wrap-up (Complete ✅)
+- ✅ MVP v0.0.1 released
+- ✅ Core mechanics polished
+- ✅ UI/UX optimized
+- ✅ Bug fixes (XP progress reset, layout issues)
 
-2. **Firebase Setup**
-   - Create Firebase project
-   - Set up Firestore schema
-   - Test read/write operations
+### Phase 2 Preparation (Next Steps)
 
-3. **Deploy MVP**
-   - Set up hosting (Vercel/Netlify)
-   - Configure domain and SSL
-   - Test in Farcaster mini app context
+1. **Firebase Setup** (Priority 1)
+   - [ ] Create Firebase project
+   - [ ] Set up Firestore database
+   - [ ] Design schema:
+     - `players/{fid}` - Player profiles
+     - `casts/{castId}` - All casts (player + NPC)
+     - `likes/{likeId}` - Like records
+     - `replies/{replyId}` - Reply records
+     - `bangers/{bangerId}` - Banger records
+   - [ ] Set up security rules
+   - [ ] Test read/write operations locally
+   - [ ] Implement Firebase sync in `firebase.cljs`
 
-4. **Gather Feedback**
-   - Share with small group of testers
-   - Collect feedback on core mechanics
-   - Iterate on UX
+2. **Deploy MVP** (Priority 2)
+   - [ ] Set up hosting (Vercel/Netlify/Firebase Hosting)
+   - [ ] Configure domain and SSL
+   - [ ] Test in Farcaster mini app context
+   - [ ] Set up environment variables
+   - [ ] Configure CORS and security headers
 
-5. **Start Phase 2 Development**
+3. **Gather Initial Feedback** (Priority 3)
+   - [ ] Share with small group of testers (5-10 people)
+   - [ ] Collect feedback on core mechanics
+   - [ ] Monitor for bugs and UX issues
+   - [ ] Iterate based on feedback
+
+4. **Phase 2 Development** (Priority 4)
+   - [ ] Implement Firebase real-time sync
+   - [ ] Build anonymous feed system
+   - [ ] Add real multiplayer interactions
+   - [ ] Implement banger detection system
+   - [ ] Build share/SVG generation system
+
+### Recommended Order
+1. **Week 1**: Firebase setup + deployment
+2. **Week 2**: Real-time sync + anonymous feed
+3. **Week 3**: Multiplayer interactions + banger system
+4. **Week 4**: Share system + polish
 
 ---
 
-Last Updated: 2025-11-21
+**Last Updated**: 2025-01-XX (v0.0.1 Release)
+**Current Version**: v0.0.1 (MVP Complete)
+**Next Milestone**: Phase 2 - Social & Multiplayer

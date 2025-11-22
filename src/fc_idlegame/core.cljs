@@ -3,7 +3,9 @@
             [reagent.dom :as rdom]
             [clojure.core.async :refer [go <!]]
             [fc-idlegame.game :as game]
-            [fc-idlegame.views :as views]))
+            [fc-idlegame.views :as views]
+            [fc-idlegame.firebase :as firebase]
+            [fc-idlegame.config :as config]))
 
 ;; Notification helpers - keep only latest 5 notifications
 (defn trim-old-notifications! [app-state]
@@ -26,38 +28,136 @@
            :seen-cast-ids #{}}))  ;; Track which casts have been seen (for animations)
 
 ;; Farcaster SDK Integration
+;; Uses @farcaster/miniapp-sdk npm package directly via JavaScript interop
+(defn- get-farcaster-sdk []
+  "Get Farcaster Mini App SDK - check window.farcaster first (mini-app context), then try require"
+  (cond
+    ;; In mini-app context, SDK is injected as window.farcaster
+    (and (exists? js/window) (.-farcaster js/window))
+    (do
+      (js/console.log "📱 Found Farcaster SDK via window.farcaster")
+      (.-farcaster js/window))
+    ;; Fallback: try to require the npm package (for local dev)
+    (exists? js/require)
+    (try
+      (let [sdk-module (js/require "@farcaster/miniapp-sdk")]
+        (js/console.log "📦 Found Farcaster SDK via require")
+        (or (.-default sdk-module) sdk-module))
+      (catch js/Error e
+        (js/console.warn "⚠️ Could not require Farcaster SDK:" (.-message e))
+        nil))
+    :else nil))
+
 (defn init-farcaster! []
   (go
     (try
-      ;; Initialize and ready the Farcaster SDK
-      ;; NOTE: Replace with actual farcaster-cljs calls once library is added
-      (js/console.log "Initializing Farcaster SDK...")
-
-      ;; Placeholder for actual SDK initialization
-      ;; (<! (fc/quick-start!))
-      ;; (let [username (<! (fc/get-username))
-      ;;       fid (<! (fc/get-fid))
-      ;;       display-name (<! (fc/get-display-name))]
-      ;;   (swap! app-state assoc
-      ;;          :initialized? true
-      ;;          :farcaster {:username username
-      ;;                      :fid fid
-      ;;                      :display-name display-name}))
-
-      ;; Mock data for now
-      (swap! app-state (fn [state]
-                         (-> state
-                             (assoc :initialized? true
-                                    :farcaster {:username "player"
-                                                :fid 12345
-                                                :display-name "Player"})
-                             (assoc-in [:game :player :fid] 12345)
-                             (assoc-in [:game :player :username] "player")
-                             (assoc-in [:game :player :display-name] "Player"))))
-
-      (js/console.log "Farcaster SDK initialized!")
+      (js/console.log "🚀 Initializing Farcaster SDK...")
+      
+      (let [sdk-instance (get-farcaster-sdk)]
+        (if sdk-instance
+          (do
+            (js/console.log "✅ Farcaster SDK instance found, waiting for ready...")
+            
+            ;; Wait for SDK to be ready (returns a Promise)
+            (let [ready-result (<! (js/Promise.resolve
+                                    (if (and sdk-instance (.-ready sdk-instance))
+                                      (.ready sdk-instance)
+                                      (js/Promise.resolve true))))]
+              (js/console.log "✅ Farcaster SDK ready, getting context...")
+              
+              ;; Get user context (returns a Promise)
+              ;; The SDK's getContext() returns a Promise with { user: { fid, username, displayName, ... } }
+              (let [context-result (<! (js/Promise.resolve
+                                       (if (and sdk-instance (.-getContext sdk-instance))
+                                         (.getContext sdk-instance)
+                                         (if (and sdk-instance (.-context sdk-instance))
+                                           (if (fn? (.-context sdk-instance))
+                                             ((.-context sdk-instance))
+                                             (.-context sdk-instance))
+                                           (js/Promise.resolve nil)))))
+                    context (if (map? context-result)
+                             context-result
+                             (try
+                               (js->clj context-result :keywordize-keys true)
+                               (catch js/Error e
+                                 (js/console.warn "Could not convert context to map:" e)
+                                 nil)))
+                    user (or (:user context) (get context "user"))
+                    username (or (:username user) (get user "username") (when user (.-username user)))
+                    fid (or (:fid user) (get user "fid") (when user (.-fid user)))
+                    display-name (or (:displayName user) (get user "displayName") (when user (.-displayName user)) (when user (.-display_name user)))]
+                
+                (js/console.log "📊 Context received:" context)
+                (js/console.log "👤 User data:" user)
+                (js/console.log "✅ Farcaster SDK initialized!" (str "User: " username " (FID: " fid ")"))
+                
+                (if (and username fid)
+                  (do
+                    ;; Update app state with real Farcaster data
+                    (swap! app-state (fn [state]
+                                      (-> state
+                                          (assoc :initialized? true
+                                                 :farcaster {:username username
+                                                             :fid fid
+                                                             :display-name display-name})
+                                          (assoc-in [:game :player :fid] (str fid))
+                                          (assoc-in [:game :player :username] username)
+                                          (assoc-in [:game :player :display-name] display-name))))
+                    
+                    ;; Initialize Firebase after Farcaster is ready
+                    (let [firebase-config (when-let [config-str (:firebase-config config/api-keys)]
+                                            (try
+                                              (js->clj (.parse js/JSON config-str) :keywordize-keys true)
+                                              (catch js/Error e
+                                                (js/console.warn "Failed to parse Firebase config:" e)
+                                                nil)))
+                          firebase-result (<! (firebase/init-firebase! firebase-config))]
+                      (js/console.log "🔥 Firebase init result:" firebase-result)
+                      
+                      ;; Load player data from Firebase if available
+                      (when (= (:mode firebase-result) :firebase)
+                        (let [player-result (<! (firebase/load-player! (str fid)))]
+                          (when (:success player-result)
+                            (js/console.log "✅ Loaded player data from Firebase")
+                            (swap! app-state assoc-in [:game :player] (:data player-result)))))))
+                  (do
+                    (js/console.warn "⚠️ Farcaster SDK available but no user data found, using mock data")
+                    (swap! app-state (fn [state]
+                                      (-> state
+                                          (assoc :initialized? true
+                                                 :farcaster {:username "player"
+                                                             :fid 12345
+                                                             :display-name "Player"})
+                                          (assoc-in [:game :player :fid] "12345")
+                                          (assoc-in [:game :player :username] "player")
+                                          (assoc-in [:game :player :display-name] "Player")))))))))
+          ;; Fallback if SDK not available
+          (do
+            (js/console.warn "⚠️ Farcaster SDK not available - using mock data for development")
+            (swap! app-state (fn [state]
+                              (-> state
+                                  (assoc :initialized? true
+                                         :farcaster {:username "player"
+                                                     :fid 12345
+                                                     :display-name "Player"})
+                                  (assoc-in [:game :player :fid] "12345")
+                                  (assoc-in [:game :player :username] "player")
+                                  (assoc-in [:game :player :display-name] "Player")))))))
+      
       (catch js/Error e
-        (js/console.error "Failed to initialize Farcaster SDK:" e)))))
+        (js/console.error "❌ Failed to initialize Farcaster SDK:" e)
+        (js/console.error "❌ Error stack:" (.-stack e))
+        ;; Fallback to mock data for development
+        (js/console.warn "⚠️ Using mock data for development")
+        (swap! app-state (fn [state]
+                          (-> state
+                              (assoc :initialized? true
+                                     :farcaster {:username "player"
+                                                 :fid 12345
+                                                 :display-name "Player"})
+                              (assoc-in [:game :player :fid] "12345")
+                              (assoc-in [:game :player :username] "player")
+                              (assoc-in [:game :player :display-name] "Player"))))))))
 
 ;; Game Loop
 (defonce game-loop-interval (atom nil))
@@ -104,9 +204,10 @@
                (.getElementById js/document "app")))
 
 (defn init! []
-  (js/console.log "Initializing app...")
+  (js/console.log "🎮 Initializing Farcaster Idle Game...")
   (init-farcaster!)
   (start-game-loop!)
+  (firebase/start-auto-save! app-state)
   (mount-root))
 
 (defn reload! []
