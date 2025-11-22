@@ -1,7 +1,8 @@
 (ns fc-idlegame.game
   (:require [clojure.string :as str]
             [fc-idlegame.config :as config]
-            [fc-idlegame.canned-casts :as canned]))
+            [fc-idlegame.canned-casts :as canned]
+            [fc-idlegame.canned-replies :as replies]))
 
 ;; ============================================================================
 ;; GAME STATE & DATA MODELS
@@ -11,7 +12,7 @@
   {:player {:level 1
             :xp 0
             :username "anon"
-            :fid nil
+            :fid "player"  ;; Default fid, will be updated when Farcaster initializes
             :display-name "Anonymous Player"
             :stats {:total-likes-given 0
                     :total-replies-given 0
@@ -23,12 +24,14 @@
                     :game-time 0}
             :modifiers {:recharge-speed 1.0}}  ;; Multiplier for recharge speed
 
-   :recharge-meters {:like {:last-action 0
-                            :ready? true}
-                     :reply {:last-action 0
+   :recharge-meters {:reply {:last-action 0
                              :ready? true}
                      :cast {:last-action 0
-                            :ready? true}}
+                            :ready? true}
+                     :idle-cast {:last-action 0
+                                 :ready? true}
+                     ;; Note: Like recharge meter removed - no cooldown on likes
+                     }
 
    :casts []  ;; All casts (player + NPC)
 
@@ -38,8 +41,9 @@
           :last-refresh 0}
 
    :game-loop {:last-tick (.now js/Date)
-               :last-idle-cast (.now js/Date)
-               :last-npc-tick (.now js/Date)}})
+               :last-npc-tick (.now js/Date)}
+   
+   :pending-notifications []})  ;; Notifications to be shown (cleared after processing)
 
 ;; ============================================================================
 ;; HELPER FUNCTIONS
@@ -77,11 +81,12 @@
 ;; ============================================================================
 
 (defn add-xp [game-state amount reason]
-  "Add XP to player and update level"
+  "Add XP to player and update level
+   Ensures level never goes below 1"
   (let [current-xp (get-in game-state [:player :xp])
         new-xp (+ current-xp amount)
-        old-level (config/level-from-xp current-xp)
-        new-level (config/level-from-xp new-xp)
+        old-level (max 1 (config/level-from-xp current-xp))  ;; Ensure min level 1
+        new-level (max 1 (config/level-from-xp new-xp))  ;; Ensure min level 1
         leveled-up? (> new-level old-level)]
 
     (js/console.log (str "XP +" amount " (" reason ") - Level " new-level))
@@ -100,12 +105,16 @@
 (defn get-xp-progress [game-state]
   "Get XP progress to next level as percentage"
   (let [current-xp (get-in game-state [:player :xp])
-        current-level (config/level-from-xp current-xp)
-        current-level-xp (config/xp-for-level current-level)
-        next-level-xp (config/xp-for-level (inc current-level))
-        progress-xp (- current-xp current-level-xp)
-        needed-xp (- next-level-xp current-level-xp)]
-    (* 100 (/ progress-xp needed-xp))))
+        current-level (get-in game-state [:player :level])  ;; Use actual player level, not recalculated
+        current-level-start-xp (if (= current-level 1)
+                                 0  ;; Level 1 starts at 0 XP
+                                 (config/xp-for-level (dec current-level)))  ;; XP needed to reach previous level (start of current level)
+        next-level-xp (config/xp-for-level (inc current-level))  ;; XP needed to reach next level
+        progress-xp (- current-xp current-level-start-xp)
+        needed-xp (- next-level-xp current-level-start-xp)]
+    (if (<= needed-xp 0)
+      100  ;; Already at max or calculation error
+      (max 0 (min 100 (* 100 (/ progress-xp needed-xp)))))))  ;; Clamp between 0 and 100
 
 ;; ============================================================================
 ;; RECHARGE METER SYSTEM
@@ -138,9 +147,11 @@
 (defn update-recharge-meters [game-state]
   "Update ready status for all recharge meters"
   (-> game-state
-      (assoc-in [:recharge-meters :like :ready?] (is-action-ready? game-state :like))
       (assoc-in [:recharge-meters :reply :ready?] (is-action-ready? game-state :reply))
-      (assoc-in [:recharge-meters :cast :ready?] (is-action-ready? game-state :cast))))
+      (assoc-in [:recharge-meters :cast :ready?] (is-action-ready? game-state :cast))
+      (assoc-in [:recharge-meters :idle-cast :ready?] (is-action-ready? game-state :idle-cast))
+      ;; Note: Like recharge meter removed - no cooldown on likes
+      ))
 
 ;; ============================================================================
 ;; CAST GENERATION SYSTEM
@@ -155,9 +166,10 @@
 
     (if cast-data
       cast-data
-      ;; Fallback if no cast found for that level/rarity combo
-      (let [fallback (canned/get-random-cast-for-level level)]
-        (or fallback {:text "vibing" :level level :rarity :common})))))
+      ;; Fallback: try common rarity if specific rarity not found, then any cast for level
+      (let [common-fallback (canned/get-cast-for-player level :common)
+            level-fallback (canned/get-random-cast-for-level level)]
+        (or common-fallback level-fallback {:text "vibing" :level level :rarity :common})))))
 
 (defn create-cast [game-state creator-fid is-npc?]
   "Create a new cast"
@@ -179,7 +191,8 @@
                   :created-at (now)
                   :expires-at expires-at
                   :is-banger? false
-                  :nft-minted? false}]
+                  :nft-minted? false
+                  :replies []}]
 
     (js/console.log (str "📝 Created " (name quality) " cast (L" level "): " (subs cast-text 0 30) "..."))
 
@@ -188,23 +201,25 @@
         (update-in [:player :stats :total-casts] (if is-npc? identity inc)))))
 
 (defn player-cast [game-state]
-  "Player generates a cast (requires level 5+)"
+  "Player manually generates a cast (uses :cast recharge meter, independent from idle casts)"
   (let [level (get-current-level game-state)
         features (config/get-level-features level)]
 
     (if-not (:can-cast? features)
       (do
-        (js/console.log "🔒 Casting locked until level 5")
+        (js/console.log "🔒 Casting is currently locked")
         game-state)
 
-      (if-not (is-action-ready? game-state :cast)
+      (if-not (is-action-ready? game-state :cast)  ;; Check MANUAL cast cooldown
         (do
-          (js/console.log "⏳ Cast recharge not ready")
+          (let [manual-time (get-time-until-ready game-state :cast)
+                idle-time (get-time-until-ready game-state :idle-cast)]
+            (js/console.log (str "⏳ Manual cast recharge not ready (manual: " (format-recharge-time manual-time) ", idle: " (format-recharge-time idle-time) ")")))
           game-state)
 
         (-> game-state
             (create-cast (get-in game-state [:player :fid]) false)
-            (assoc-in [:recharge-meters :cast :last-action] (now))
+            (assoc-in [:recharge-meters :cast :last-action] (now))  ;; Update MANUAL cast meter
             (assoc-in [:recharge-meters :cast :ready?] false)
             (add-xp (:cast-generated config/xp-sources) "cast generated"))))))
 
@@ -235,13 +250,7 @@
         (js/console.log "Already liked this cast")
         game-state)
 
-      ;; Recharge not ready
-      (not (is-action-ready? game-state :like))
-      (do
-        (js/console.log "⏳ Like recharge not ready")
-        game-state)
-
-      ;; Can like!
+      ;; Can like! (no cooldown - limited by available casts)
       :else
       (let [is-real-like (not (:is-npc? cast))
             likes (inc (count (get-in game-state [:likes cast-id] #{})))
@@ -258,11 +267,7 @@
           ;; Record the like
           true (update-in [:likes cast-id] (fnil conj #{}) player-fid)
 
-          ;; Update recharge meter
-          true (assoc-in [:recharge-meters :like :last-action] (now))
-          true (assoc-in [:recharge-meters :like :ready?] false)
-
-          ;; Add XP for liking
+          ;; Add XP for liking (no cooldown, smaller XP impact)
           true (add-xp (:like-given config/xp-sources) "like given")
 
           ;; If cast owner gets XP (if not NPC)
@@ -305,10 +310,12 @@
    "ser"
    "wagmi"])
 
-(defn reply-to-cast [game-state cast-id reply-text]
-  "Player replies to a cast"
+(defn reply-to-cast [game-state cast-id]
+  "Player replies to a cast (uses random canned reply based on level)"
   (let [cast-index (.indexOf (map :id (:casts game-state)) cast-id)
-        cast (when (>= cast-index 0) (nth (:casts game-state) cast-index))]
+        cast (when (>= cast-index 0) (nth (:casts game-state) cast-index))
+        player-level (get-current-level game-state)
+        reply-text (replies/get-random-reply player-level)]
 
     (cond
       ;; Cast doesn't exist
@@ -329,8 +336,12 @@
         (js/console.log (str "💬 Replied: " reply-text))
 
         (cond-> game-state
-          ;; Add reply to cast (not implementing replies list yet for MVP)
-          ;; true (update-in [:casts cast-index :replies] conj {:text reply-text :created-at (now)})
+          ;; Add reply to cast
+          true (update-in [:casts cast-index :replies] (fnil conj [])
+                          {:id (str "reply-" (.now js/Date) "-" (rand-int 1000000))
+                           :player-fid (get-in game-state [:player :fid])
+                           :text reply-text
+                           :created-at (now)})
 
           ;; Update recharge meter
           true (assoc-in [:recharge-meters :reply :last-action] (now))
@@ -380,51 +391,218 @@
 ;; NPC SYSTEM
 ;; ============================================================================
 
+(def npc-name-prefixes
+  ["alice" "bob" "charlie" "diana" "eve" "frank" "grace" "henry" "iris" "jack"
+   "kate" "liam" "mia" "noah" "olivia" "paul" "quinn" "ruby" "sam" "tara"
+   "uma" "vince" "willa" "xander" "yara" "zoe"])
+
+(def npc-name-suffixes
+  ["crypto" "degen" "builder" "hodler" "gm" "wagmi" "ser" "anon" "dev" "nft"
+   "dao" "defi" "web3" "eth" "btc" "alpha" "diamond" "moon" "bull" "bear"])
+
+(defn generate-npc-name []
+  "Generate a random NPC name"
+  (let [prefix (rand-nth npc-name-prefixes)
+        suffix (rand-nth npc-name-suffixes)
+        number (rand-int 1000)]
+    (str prefix "-" suffix "-" number)))
+
 (defn generate-npc-cast [game-state]
   "NPC generates a cast for the feed"
-  (create-cast game-state (str "npc-" (rand-int 1000)) true))
+  (create-cast game-state (generate-npc-name) true))
+
+(defn npc-like-cast [game-state cast-id npc-fid]
+  "NPC likes a cast (no recharge check, no XP for NPC)"
+  (let [cast-index (.indexOf (map :id (:casts game-state)) cast-id)
+        cast (when (>= cast-index 0) (nth (:casts game-state) cast-index))]
+
+    (cond
+      ;; Cast doesn't exist or already liked
+      (or (< cast-index 0)
+          (has-liked? game-state cast-id npc-fid))
+      game-state
+
+      ;; Can like!
+      :else
+      (let [likes (inc (count (get-in game-state [:likes cast-id] #{})))
+            level (get-in cast [:level])
+            features (config/get-level-features level)
+            can-be-banger? (:can-create-bangers? features)
+            becomes-banger? (and can-be-banger?
+                                 (>= likes (:required-likes config/banger-threshold))
+                                 (not (:is-banger? cast)))]
+
+        (js/console.log (str "🤖 NPC " npc-fid " liked cast (total: " likes ")"))
+
+        (cond-> game-state
+          ;; Record the like
+          true (update-in [:likes cast-id] (fnil conj #{}) npc-fid)
+
+          ;; If cast owner gets XP (only if it's the player's cast, not NPC)
+          (and (not (:is-npc? cast))
+               (= (:player-fid cast) (get-in game-state [:player :fid])))
+          (-> (add-xp (:like-received config/xp-sources) "like received from NPC")
+              ;; Add notification
+              (update :pending-notifications (fnil conj [])
+                      {:type :like
+                       :username npc-fid
+                       :message "liked your cast"}))
+
+          ;; Check for banger
+          becomes-banger?
+          (-> (assoc-in [:casts cast-index :is-banger?] true)
+              (assoc-in [:casts cast-index :expires-at] nil)
+              (update-in [:player :stats :total-bangers] inc)
+              (add-xp (:banger-achieved config/xp-sources) "banger achieved")))))))
+
+(defn npc-reply-to-cast [game-state cast-id npc-fid npc-level]
+  "NPC replies to a cast (only NPCs under level 10 can reply)"
+  (if (>= npc-level 10)
+    game-state  ;; NPCs level 10+ don't reply
+    (let [cast-index (.indexOf (map :id (:casts game-state)) cast-id)
+          cast (when (>= cast-index 0) (nth (:casts game-state) cast-index))
+          reply-text (replies/get-random-reply npc-level)]
+
+      (cond
+        ;; Cast doesn't exist
+        (< cast-index 0)
+        game-state
+
+        ;; Can reply!
+        :else
+        (do
+          (js/console.log (str "🤖 NPC " npc-fid " replied: " reply-text))
+
+          (cond-> game-state
+            ;; Add reply to cast
+            true (update-in [:casts cast-index :replies] (fnil conj [])
+                            {:id (str "reply-" (.now js/Date) "-" (rand-int 1000000))
+                             :player-fid npc-fid
+                             :text reply-text
+                             :created-at (now)})
+            
+            ;; Add XP for replying (only if it's the player's cast)
+            (and (not (:is-npc? cast))
+                 (= (:player-fid cast) (get-in game-state [:player :fid])))
+            (-> (add-xp (:reply-received config/xp-sources) "reply received from NPC")
+                ;; Add notification
+                (update :pending-notifications (fnil conj [])
+                        {:type :reply
+                         :username npc-fid
+                         :message (str "replied: \"" reply-text "\"")}))))))))
 
 (defn npc-tick [game-state]
-  "NPC actors generate casts and interact"
+  "NPC actors generate casts and interact (likes/replies)"
   (let [player-level (get-current-level game-state)
-        should-generate-cast? (< (rand) 0.3)]  ;; 30% chance to generate NPC cast
-
-    (cond-> game-state
-      ;; Generate NPC cast for early levels
-      (and should-generate-cast? (< player-level 5))
-      (generate-npc-cast))))
+        ;; 5x increase: Generate NPC cast 100% of the time (was 30%)
+        should-generate-cast? true
+        active-casts (get-active-casts game-state)
+        player-fid (get-in game-state [:player :fid])
+        
+        ;; Get player's casts (for NPCs to interact with)
+        player-casts (filter #(and (not (:is-npc? %))
+                                    (= (:player-fid %) player-fid))
+                             active-casts)
+        
+        ;; NPC interaction probabilities - 5x increase for likes
+        like-probability config/npc-like-probability  ;; Use config value (now 75%)
+        reply-probability 0.08  ;; 8% chance per cast per tick (lower than likes)
+        
+        ;; Generate NPC name and level for interactions
+        npc-fid (generate-npc-name)
+        npc-level (rand-int 9)]  ;; NPCs are level 0-8 (under level 10)
+    
+    (let [state-after-cast (cond-> game-state
+                              ;; Generate NPC cast (always now, 5x increase)
+                              (and should-generate-cast? (< player-level 5))
+                              (generate-npc-cast))
+          
+          state-after-likes (if (seq player-casts)
+                            (reduce (fn [acc-state cast]
+                                      (if (< (rand) like-probability)
+                                        (npc-like-cast acc-state (:id cast) npc-fid)
+                                        acc-state))
+                                    state-after-cast
+                                    player-casts)
+                            state-after-cast)
+          
+          state-after-replies (if (and (seq player-casts) (< npc-level 10))
+                               (reduce (fn [acc-state cast]
+                                         (if (< (rand) reply-probability)
+                                           (npc-reply-to-cast acc-state (:id cast) npc-fid npc-level)
+                                           acc-state))
+                                       state-after-likes
+                                       player-casts)
+                               state-after-likes)]
+      state-after-replies)))
 
 ;; ============================================================================
 ;; GAME LOOP
 ;; ============================================================================
+
+(defn idle-cast [game-state]
+  "Generate an idle cast automatically (uses :idle-cast recharge meter, independent from manual casts)"
+  (let [level (get-current-level game-state)
+        features (config/get-level-features level)]
+    (if-not (:can-cast? features)
+      (do
+        (js/console.log "🔒 Idle cast skipped - casting not unlocked")
+        game-state)
+      (let [player-fid (get-in game-state [:player :fid] "player")]
+        (if (nil? player-fid)
+          (do
+            (js/console.log "⚠️ Idle cast skipped - player fid not set")
+            game-state)
+          (do
+            (js/console.log (str "🤖 Generating idle cast... (player-fid: " player-fid ", level: " level ", can-cast?: " (:can-cast? features) ")"))
+            (-> game-state
+                (create-cast player-fid false)
+                (assoc-in [:recharge-meters :idle-cast :last-action] (now))
+                (assoc-in [:recharge-meters :idle-cast :ready?] false)
+                (add-xp (:idle-cast config/xp-sources) "idle cast"))))))))
 
 (defn tick [game-state]
   "Main game loop tick - called every second"
   (let [now (now)
         last-tick (get-in game-state [:game-loop :last-tick])
         last-npc-tick (get-in game-state [:game-loop :last-npc-tick])
+        ;; Use recharge meter's last-action as single source of truth for idle casts
+        last-idle-cast-action (get-in game-state [:recharge-meters :idle-cast :last-action] 0)
 
         delta-ms (- now last-tick)
         delta-seconds (/ delta-ms 1000)
 
         ;; Check if it's time for NPC tick
         time-since-npc-tick (- now last-npc-tick)
-        should-npc-tick? (>= time-since-npc-tick config/npc-tick-interval-ms)]
+        should-npc-tick? (>= time-since-npc-tick config/npc-tick-interval-ms)
 
-    (cond-> game-state
-      ;; Update game time
-      true (update-in [:player :stats :game-time] + delta-seconds)
-      true (assoc-in [:game-loop :last-tick] now)
-
-      ;; Update recharge meters
-      true (update-recharge-meters)
-
-      ;; NPC tick if needed
-      should-npc-tick? (-> npc-tick
-                           (assoc-in [:game-loop :last-npc-tick] now))
-
-      ;; Refresh feed
-      true (refresh-feed))))
+        ;; Check if it's time for an idle cast (use recharge meter timer)
+        time-since-idle-cast (- now last-idle-cast-action)
+        should-idle-cast? (>= time-since-idle-cast config/idle-cast-interval-ms)]
+    
+    (let [state-after-time (-> game-state
+                                (update-in [:player :stats :game-time] + delta-seconds)
+                                (assoc-in [:game-loop :last-tick] now)
+                                (update-recharge-meters))
+          
+          state-after-idle (if should-idle-cast?
+                            (let [idle-result (idle-cast state-after-time)]
+                              (js/console.log (str "⏰ Idle cast check: " time-since-idle-cast "ms since last (need " config/idle-cast-interval-ms "ms)"))
+                              ;; If idle-cast returned early (same state), force update timer to prevent infinite retries
+                              (if (= idle-result state-after-time)
+                                (do
+                                  (js/console.log "⚠️ Idle cast skipped - forcing timer update to prevent retry loop")
+                                  (assoc-in state-after-time [:recharge-meters :idle-cast :last-action] now))
+                                idle-result))
+                            state-after-time)
+          
+          state-after-npc (if should-npc-tick?
+                           (-> state-after-idle
+                               npc-tick
+                               (assoc-in [:game-loop :last-npc-tick] now))
+                           state-after-idle)]
+      
+      (refresh-feed state-after-npc))))
 
 ;; ============================================================================
 ;; STATS & ANALYTICS

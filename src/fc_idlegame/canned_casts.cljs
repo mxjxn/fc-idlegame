@@ -14,6 +14,82 @@
 
 (def canned-casts
   [;; ========================================================================
+   ;; LEVEL 0 - Very first interactions, pre-account, most basic
+   ;; ========================================================================
+
+   ;; Common (dimwit) - Level 0
+   {:text "test" :level 0 :rarity :common}
+   {:text "hello" :level 0 :rarity :common}
+   {:text "hi" :level 0 :rarity :common}
+   {:text "hey" :level 0 :rarity :common}
+   {:text "what is this" :level 0 :rarity :common}
+   {:text "where am i" :level 0 :rarity :common}
+   {:text "what is happening" :level 0 :rarity :common}
+   {:text "confused" :level 0 :rarity :common}
+   {:text "help" :level 0 :rarity :common}
+   {:text "?" :level 0 :rarity :common}
+   {:text "???" :level 0 :rarity :common}
+   {:text "what" :level 0 :rarity :common}
+   {:text "huh" :level 0 :rarity :common}
+   {:text "ok" :level 0 :rarity :common}
+   {:text "okay" :level 0 :rarity :common}
+   {:text "cool" :level 0 :rarity :common}
+   {:text "nice" :level 0 :rarity :common}
+   {:text "weird" :level 0 :rarity :common}
+   {:text "interesting" :level 0 :rarity :common}
+   {:text "hmm" :level 0 :rarity :common}
+   {:text "hm" :level 0 :rarity :common}
+   {:text "idk" :level 0 :rarity :common}
+   {:text "i dont know" :level 0 :rarity :common}
+   {:text "maybe" :level 0 :rarity :common}
+   {:text "sure" :level 0 :rarity :common}
+   {:text "yeah" :level 0 :rarity :common}
+   {:text "yep" :level 0 :rarity :common}
+   {:text "nope" :level 0 :rarity :common}
+   {:text "nah" :level 0 :rarity :common}
+   {:text "lol" :level 0 :rarity :common}
+   {:text "haha" :level 0 :rarity :common}
+   {:text "lmao" :level 0 :rarity :common}
+   {:text "wow" :level 0 :rarity :common}
+   {:text "omg" :level 0 :rarity :common}
+   {:text "wtf" :level 0 :rarity :common}
+   {:text "bruh" :level 0 :rarity :common}
+   {:text "fr" :level 0 :rarity :common}
+   {:text "frfr" :level 0 :rarity :common}
+   {:text "tbh" :level 0 :rarity :common}
+   {:text "ngl" :level 0 :rarity :common}
+   {:text "same" :level 0 :rarity :common}
+   {:text "facts" :level 0 :rarity :common}
+
+   ;; Uncommon - Level 0
+   {:text "what even is this place" :level 0 :rarity :uncommon}
+   {:text "someone explain what im looking at" :level 0 :rarity :uncommon}
+   {:text "this seems different from other apps" :level 0 :rarity :uncommon}
+   {:text "curious what this is about" :level 0 :rarity :uncommon}
+   {:text "heard this was cool" :level 0 :rarity :uncommon}
+   {:text "trying to understand" :level 0 :rarity :uncommon}
+   {:text "seems interesting so far" :level 0 :rarity :uncommon}
+   {:text "not sure what to make of this" :level 0 :rarity :uncommon}
+   {:text "early impressions are positive" :level 0 :rarity :uncommon}
+   {:text "feels different somehow" :level 0 :rarity :uncommon}
+
+   ;; Rare - Level 0
+   {:text "the interface is clean but i'm lost" :level 0 :rarity :rare}
+   {:text "wondering if this is worth my time" :level 0 :rarity :rare}
+   {:text "first time trying something like this" :level 0 :rarity :rare}
+   {:text "taking a leap into the unknown" :level 0 :rarity :rare}
+   {:text "curious about the community here" :level 0 :rarity :rare}
+   {:text "seems like there's potential here" :level 0 :rarity :rare}
+   {:text "early days but i'm intrigued" :level 0 :rarity :rare}
+   {:text "willing to give this a chance" :level 0 :rarity :rare}
+
+   ;; Epic - Level 0
+   {:text "stepping into uncharted territory, let's see what happens" :level 0 :rarity :epic}
+   {:text "every new platform starts somewhere, maybe this is it" :level 0 :rarity :epic}
+   {:text "the unknown is where interesting things happen" :level 0 :rarity :epic}
+   {:text "first impressions matter but so does giving things time" :level 0 :rarity :epic}
+
+   ;; ========================================================================
    ;; LEVEL 1 - New to Farcaster, exploring, asking questions
    ;; ========================================================================
 
@@ -38,6 +114,44 @@
    {:text "whats the point of this" :level 1 :rarity :common}
    {:text "just joined" :level 1 :rarity :common}
    {:text "hi" :level 1 :rarity :common}
+   {:text "hey" :level 1 :rarity :common}
+   {:text "whats up" :level 1 :rarity :common}
+   {:text "new here" :level 1 :rarity :common}
+   {:text "first day" :level 1 :rarity :common}
+   {:text "how does this work" :level 1 :rarity :common}
+   {:text "confused" :level 1 :rarity :common}
+   {:text "help" :level 1 :rarity :common}
+   {:text "anyone around" :level 1 :rarity :common}
+   {:text "is this like twitter" :level 1 :rarity :common}
+   {:text "where are the likes" :level 1 :rarity :common}
+   {:text "how do i post" :level 1 :rarity :common}
+   {:text "what should i post" :level 1 :rarity :common}
+   {:text "this seems cool" :level 1 :rarity :common}
+   {:text "still figuring it out" :level 1 :rarity :common}
+   {:text "learning" :level 1 :rarity :common}
+   {:text "exploring" :level 1 :rarity :common}
+   {:text "checking this out" :level 1 :rarity :common}
+   {:text "heard about this" :level 1 :rarity :common}
+   {:text "friend told me to join" :level 1 :rarity :common}
+   {:text "came from reddit" :level 1 :rarity :common}
+   {:text "came from discord" :level 1 :rarity :common}
+   {:text "looking for something new" :level 1 :rarity :common}
+   {:text "tired of twitter" :level 1 :rarity :common}
+   {:text "tired of facebook" :level 1 :rarity :common}
+   {:text "need a break from social media" :level 1 :rarity :common}
+   {:text "what makes this special" :level 1 :rarity :common}
+   {:text "why should i use this" :level 1 :rarity :common}
+   {:text "seems empty" :level 1 :rarity :common}
+   {:text "where is everyone" :level 1 :rarity :common}
+   {:text "small community" :level 1 :rarity :common}
+   {:text "nice people here" :level 1 :rarity :common}
+   {:text "friendly place" :level 1 :rarity :common}
+   {:text "better than expected" :level 1 :rarity :common}
+   {:text "not what i expected" :level 1 :rarity :common}
+   {:text "interesting" :level 1 :rarity :common}
+   {:text "weird but cool" :level 1 :rarity :common}
+   {:text "giving it a shot" :level 1 :rarity :common}
+   {:text "we'll see how this goes" :level 1 :rarity :common}
 
    ;; Uncommon - Level 1
    {:text "curious about this decentralized thing everyone talks about" :level 1 :rarity :uncommon}
@@ -251,8 +365,8 @@
 
 (defn get-cast-for-player [player-level target-rarity]
   "Get a random cast appropriate for player's level and desired rarity
-   Selects from last 3 levels worth of content (never exceeding player level)"
-  (let [min-level (max 1 (- player-level 2))
+   Selects from last 3 levels worth of content (never exceeding player level, minimum level 1)"
+  (let [min-level (max 1 (- player-level 2))  ;; Minimum level 1, never go below
         max-level player-level
         available-casts (filter #(and (>= (:level %) min-level)
                                       (<= (:level %) max-level)
@@ -262,9 +376,10 @@
       (rand-nth available-casts))))
 
 (defn get-random-cast-for-level [player-level]
-  "Get a random cast appropriate for player level, with quality rolled"
+  "Get a random cast appropriate for player level, with quality rolled
+   Minimum level 1, never go below"
   ;; Roll for quality first
-  (let [min-level (max 1 (- player-level 2))
+  (let [min-level (max 1 (- player-level 2))  ;; Minimum level 1, never go below
         max-level player-level
         available-casts (get-casts-by-level-range min-level max-level)]
     (when (seq available-casts)

@@ -6,7 +6,7 @@
 
 ;; XP & Leveling
 (def xp-sources
-  {:like-given 2         ;; Give a like to someone's cast
+  {:like-given 1         ;; Give a like to someone's cast (reduced XP, no cooldown)
    :reply-given 5        ;; Reply to someone's cast
    :cast-generated 1     ;; Generate your own cast (level 5+)
    :idle-cast 1          ;; Idle cast generated automatically
@@ -17,8 +17,9 @@
 (def xp-per-level 100)
 
 (defn level-from-xp [xp]
-  "Calculate level from total XP"
-  (Math/floor (Math/sqrt (/ xp xp-per-level))))
+  "Calculate level from total XP
+   Minimum level is 1 (players always start at level 1)"
+  (max 1 (Math/floor (Math/sqrt (/ xp xp-per-level)))))
 
 (defn xp-for-level [level]
   "Calculate XP needed to reach a level"
@@ -32,14 +33,20 @@
     (- next-level-xp current-xp)))
 
 ;; ============================================================================
-;; RECHARGE METERS
+;; RECHARGE METERS - SINGLE SOURCE OF TRUTH
 ;; ============================================================================
+;; ⚠️ CHANGE THESE VALUES FOR TESTING - All recharge times are defined here
+;; These are in milliseconds
 
-;; Base recharge times (in milliseconds)
-(def base-recharge-times
-  {:like 30000    ;; 30 seconds base
-   :reply 60000   ;; 60 seconds base
-   :cast 120000}) ;; 120 seconds base (level 5+)
+(def ^:const RECHARGE-TIMES
+  {:reply 5000       ;; Reply cooldown (5 seconds for testing)
+   :cast 10000       ;; Manual cast cooldown (10 seconds for testing)
+   :idle-cast 15000  ;; Idle cast interval (15 seconds for testing)
+   ;; Note: Like recharge removed - no cooldown on likes
+   })
+
+;; Base recharge times (in milliseconds) - references RECHARGE-TIMES
+(def base-recharge-times RECHARGE-TIMES)
 
 ;; Recharge time decreases with level
 (defn get-recharge-time [action-type level modifiers]
@@ -103,7 +110,7 @@
 ;; ============================================================================
 
 (def level-features
-  {1 {:can-cast? false           ;; Cannot cast yet
+  {1 {:can-cast? true            ;; Can cast from the start
       :can-like? true            ;; Can like
       :can-reply? true           ;; Can reply
       :can-share-level? true
@@ -111,7 +118,7 @@
       :ai-generation? false
       :memory-size 0}
 
-   5 {:can-cast? true            ;; Unlock casting!
+   5 {:can-cast? true            ;; Casting still available
       :can-like? true
       :can-reply? true
       :can-share-level? true
@@ -149,17 +156,31 @@
 
 (defn get-level-features [level]
   "Get features available at a given level"
-  (let [milestone-levels (sort (keys level-features))
+  (let [level (max 1 (or level 1))  ;; Ensure level is at least 1
+        milestone-levels (sort (keys level-features))
         applicable-level (last (filter #(<= % level) milestone-levels))]
-    (get level-features applicable-level
-         {:can-cast? false
-          :can-like? true
-          :can-reply? true
-          :can-share-level? true
-          :can-cast-to-fc? false
-          :can-create-bangers? false
-          :ai-generation? false
-          :memory-size 0})))
+    (if (nil? applicable-level)
+      ;; If no applicable level found (shouldn't happen with level >= 1), default to level 1 features
+      (do
+        (js/console.warn (str "⚠️ No applicable level found for level " level ", defaulting to level 1 features"))
+        (get level-features 1
+             {:can-cast? true
+              :can-like? true
+              :can-reply? true
+              :can-share-level? true
+              :can-cast-to-fc? false
+              :can-create-bangers? false
+              :ai-generation? false
+              :memory-size 0}))
+      (get level-features applicable-level
+           {:can-cast? true  ;; Default to true instead of false
+            :can-like? true
+            :can-reply? true
+            :can-share-level? true
+            :can-cast-to-fc? false
+            :can-create-bangers? false
+            :ai-generation? false
+            :memory-size 0}))))
 
 ;; ============================================================================
 ;; BANGER SYSTEM
@@ -176,13 +197,13 @@
 
 (def feed-level-range 2) ;; Show casts from ±2 levels
 
-;; NPC System
-(def npc-like-probability 0.10) ;; 10% chance per tick
+;; NPC System - 5x rates for testing
+(def npc-like-probability 0.75) ;; 75% chance per cast per tick (5x increase - was 15%)
 (def npc-reply-probability 0.05) ;; 5% chance per tick
-(def npc-tick-interval-ms 30000) ;; Check every 30 seconds
+(def npc-tick-interval-ms 3000) ;; Check every 3 seconds (10x faster - was 30 seconds, gives ~5x NPC casts vs player casts)
 
-;; Idle Cast System
-(def idle-cast-interval-ms 120000) ;; Generate idle cast every 2 minutes
+;; Idle Cast System - uses RECHARGE-TIMES[:idle-cast] as single source of truth
+(def idle-cast-interval-ms (:idle-cast RECHARGE-TIMES))
 
 ;; ============================================================================
 ;; CAST LIFESPAN
@@ -268,5 +289,8 @@
 ;; ============================================================================
 
 (def api-keys
-  {:openai-key (or (.-OPENAI_API_KEY js/process.env) nil)
-   :firebase-config (or (.-FIREBASE_CONFIG js/process.env) nil)})
+  (let [process-env (when (and (not= js/process js/undefined)
+                                (.-env js/process))
+                      (.-env js/process))]
+    {:openai-key (when process-env (.-OPENAI_API_KEY process-env))
+     :firebase-config (when process-env (.-FIREBASE_CONFIG process-env))}))
